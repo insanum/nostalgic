@@ -236,6 +236,9 @@ function Track()
     log $CLR_GREEN "--> symlinked [$newfile] to [$1]"
 
     if [[ $DRYRUN -eq 0 ]]; then
+        TGTDIR="`dirname $1`"
+        [[ "$TGTDIR" != "." ]] && mkdir -p "$repo/${TGTDIR#.}"
+
         mv -f "$1" "$newfile"
         ln -s "$newfile" "$1"
 
