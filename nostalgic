@@ -24,6 +24,12 @@
 #
 # Dude... just buy me a beer. :-)
 
+#
+# Home: https://github.com/insanum/nostalgic
+#
+# Author: Eric Davis <http://insanum.com>
+#
+
 REPOS=$HOME/dotfiles
 DEST=$HOME
 DRYRUN=0

@@ -229,7 +229,7 @@ lrwxrwxrwx  1 insanum users   33 Jun 23 17:32 .vimrc -> /home/insanum/dotfiles/d
 dotfiles/priv:
 ./  ../  .git/  passwd
 
-dotfiles/test:
+dotfiles/dotfiles:
 ./  ../  bashrc  .git/  vimrc
 ```
 
