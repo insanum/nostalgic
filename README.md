@@ -58,7 +58,7 @@ HowTo
    -n         dry run (no changes are performed)
    -s         skip conflicts
    -f         auto fix conflicts (default is interactive)
-   -r <dir>   repo dir (default = $HOME/dotfiles)
+   -r <dir>   repo dir (default = $HOME/dots)
    -d <dir>   symlink destination dir (default = $HOME)
 
  Commands:
@@ -72,23 +72,23 @@ HowTo
 
 #### Example
 
-Cloned git repos live under $HOME/dotfiles (overridden with -r).
+Cloned git repos live under $HOME/dots (overridden with -r).
 
 Symlinked files go under $HOME (overridden with -d).
 
 ```
-~ % mkdir dotfiles
+~ % mkdir dots
 
 ~ % mkdir test
 
 ~ % nostalgic clone https://github.com/insanum/dotfiles.git
---> cloning [/home/insanum/dotfiles/dotfiles]
-Cloning into '/home/insanum/dotfiles/dotfiles'...
+--> cloning [/home/insanum/dots/dotfiles]
+Cloning into '/home/insanum/dots/dotfiles'...
 remote: Counting objects: 3, done.
 remote: Total 3 (delta 0), reused 0 (delta 0)
 Unpacking objects: 100% (3/3), done.
 
-~ % ls dotfiles
+~ % ls dots
 dotfiles/
 
 ~ % mkdir priv
@@ -101,23 +101,23 @@ Initialized empty Git repository in /home/insanum/priv/
 ~/priv % cd ..
 
 ~ % nostalgic clone $HOME/priv
---> cloning [/home/insanum/dotfiles/priv]
-Cloning into '/home/insanum/dotfiles/priv'...
+--> cloning [/home/insanum/dots/priv]
+Cloning into '/home/insanum/dots/priv'...
 warning: You appear to have cloned an empty repository.
 done.
 
 ~ % nostalgic list
---> repo [/home/insanum/dotfiles/priv] cloned from [/home/insanum/priv]
---> repo [/home/insanum/dotfiles/dotfiles] cloned from [https://github.com/insanum/dotfiles.git]
+--> repo [/home/insanum/dots/priv] cloned from [/home/insanum/priv]
+--> repo [/home/insanum/dots/dotfiles] cloned from [https://github.com/insanum/dotfiles.git]
 
 ~ % nostalgic status ALL
---> git status for repo [/home/insanum/dotfiles/priv]
+--> git status for repo [/home/insanum/dots/priv]
 # On branch master
 #
 # Initial commit
 #
 nothing to commit (create/copy files and use "git add" to track)
---> git status for repo [/home/insanum/dotfiles/dotfiles]
+--> git status for repo [/home/insanum/dots/dotfiles]
 # On branch master
 nothing to commit (working directory clean)
 
@@ -136,9 +136,9 @@ nothing to commit (working directory clean)
 ./  ../  .bashrc  .passwd  .vimrc
 
 ~/test % nostalgic track .bashrc dotfiles
---> adding [/home/insanum/dotfiles/dotfiles/bashrc] to repo [/home/insanum/dotfiles/dotfiles]
---> symlinked [/home/insanum/dotfiles/dotfiles/bashrc] to [.bashrc]
---> git status for repo [/home/insanum/dotfiles/dotfiles]
+--> adding [/home/insanum/dots/dotfiles/bashrc] to repo [/home/insanum/dots/dotfiles]
+--> symlinked [/home/insanum/dots/dotfiles/bashrc] to [.bashrc]
+--> git status for repo [/home/insanum/dots/dotfiles]
 # On branch master
 # Changes to be committed:
 #   (use "git reset HEAD <file>..." to unstage)
@@ -150,9 +150,9 @@ nothing to commit (working directory clean)
 ./  ../  .bashrc@  .passwd  .vimrc
 
 ~/test % nostalgic track .vimrc dotfiles
---> adding [/home/insanum/dotfiles/dotfiles/vimrc] to repo [/home/insanum/dotfiles/dotfiles]
---> symlinked [/home/insanum/dotfiles/dotfiles/vimrc] to [.vimrc]
---> git status for repo [/home/insanum/dotfiles/dotfiles]
+--> adding [/home/insanum/dots/dotfiles/vimrc] to repo [/home/insanum/dots/dotfiles]
+--> symlinked [/home/insanum/dots/dotfiles/vimrc] to [.vimrc]
+--> git status for repo [/home/insanum/dots/dotfiles]
 # On branch master
 # Changes to be committed:
 #   (use "git reset HEAD <file>..." to unstage)
@@ -162,9 +162,9 @@ nothing to commit (working directory clean)
 #
 
 ~/test % nostalgic track .passwd priv
---> adding [/home/insanum/dotfiles/priv/passwd] to repo [/home/insanum/dotfiles/priv]
---> symlinked [/home/insanum/dotfiles/priv/passwd] to [.passwd]
---> git status for repo [/home/insanum/dotfiles/priv]
+--> adding [/home/insanum/dots/priv/passwd] to repo [/home/insanum/dots/priv]
+--> symlinked [/home/insanum/dots/priv/passwd] to [.passwd]
+--> git status for repo [/home/insanum/dots/priv]
 # On branch master
 #
 # Initial commit
@@ -176,7 +176,7 @@ nothing to commit (working directory clean)
 #
 
 ~/test % nostalgic status ALL
---> git status for repo [/home/insanum/dotfiles/priv]
+--> git status for repo [/home/insanum/dots/priv]
 # On branch master
 #
 # Initial commit
@@ -186,7 +186,7 @@ nothing to commit (working directory clean)
 #
 #       new file:   passwd
 #
---> git status for repo [/home/insanum/dotfiles/dotfiles]
+--> git status for repo [/home/insanum/dots/dotfiles]
 # On branch master
 # Changes to be committed:
 #   (use "git reset HEAD <file>..." to unstage)
@@ -209,9 +209,9 @@ rm: remove symbolic link ‘.vimrc’? y
 ./  ../
 
 ~/test % nostalgic -d ~/test symlink ALL
---> symlinking repo [/home/insanum/dotfiles/priv]
+--> symlinking repo [/home/insanum/dots/priv]
 --> symlinked [passwd]
---> symlinking repo [/home/insanum/dotfiles/dotfiles]
+--> symlinking repo [/home/insanum/dots/dotfiles]
 --> symlinked [bashrc]
 --> symlinked [vimrc]
 
@@ -219,17 +219,17 @@ rm: remove symbolic link ‘.vimrc’? y
 total 8
 drwxr-xr-x  2 insanum users 4096 Jun 23 17:32 ./
 drwx------ 45 insanum users 4096 Jun 23 17:32 ../
-lrwxrwxrwx  1 insanum users   34 Jun 23 17:32 .bashrc -> /home/insanum/dotfiles/dotfiles/bashrc
-lrwxrwxrwx  1 insanum users   34 Jun 23 17:32 .passwd -> /home/insanum/dotfiles/priv/passwd
-lrwxrwxrwx  1 insanum users   33 Jun 23 17:32 .vimrc -> /home/insanum/dotfiles/dotfiles/vimrc
+lrwxrwxrwx  1 insanum users   34 Jun 23 17:32 .bashrc -> /home/insanum/dots/dotfiles/bashrc
+lrwxrwxrwx  1 insanum users   34 Jun 23 17:32 .passwd -> /home/insanum/dots/priv/passwd
+lrwxrwxrwx  1 insanum users   33 Jun 23 17:32 .vimrc -> /home/insanum/dots/dotfiles/vimrc
 
 ~/test % cd
 
-~ % ls -a dotfiles/*
-dotfiles/priv:
+~ % ls -a dots/*
+dots/priv:
 ./  ../  .git/  passwd
 
-dotfiles/dotfiles:
+dots/dotfiles:
 ./  ../  bashrc  .git/  vimrc
 ```
 
