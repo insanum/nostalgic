@@ -222,5 +222,14 @@ drwx------ 45 insanum users 4096 Jun 23 17:32 ../
 lrwxrwxrwx  1 insanum users   34 Jun 23 17:32 .bashrc -> /home/insanum/dotfiles/dotfiles/bashrc
 lrwxrwxrwx  1 insanum users   34 Jun 23 17:32 .passwd -> /home/insanum/dotfiles/priv/passwd
 lrwxrwxrwx  1 insanum users   33 Jun 23 17:32 .vimrc -> /home/insanum/dotfiles/dotfiles/vimrc
+
+~/test % cd
+
+~ % ls -a dotfiles/*
+dotfiles/priv:
+./  ../  .git/  passwd
+
+dotfiles/test:
+./  ../  bashrc  .git/  vimrc
 ```
 
