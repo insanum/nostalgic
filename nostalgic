@@ -60,7 +60,11 @@ function log()
 # Get the repo name from an URL
 function parse_url()
 {
-    printf "$1" | sed -r 's#^.*/([^/.]+)(\.git)?$#\1#'
+    SED=sed
+    if [[ $OSTYPE =~ solaris ]]; then
+        SED=gsed
+    fi
+    printf "$1" | $SED -r 's#^.*/([^/.]+)(\.git)?$#\1#'
 }
 
 function Clone()
