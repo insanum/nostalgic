@@ -32,11 +32,14 @@ Features
 NOTE
 ----
 
-One thing to know about this script is every file and directory symlinked from
+One thing to know about this script is that in 'dot' mode every file and directory symlinked from
 a git repo is prefixed WITH a dot(.) and each of these files is stored in the
 git repo WITHOUT a dot(.). Please submit a pull request if you like the script
 but not this behaviour. And make sure it's configurable via a command line
 option.
+
+Nostalgic also supports managing binaries (without dot prefix manipulation).  In 'bin' mode (pass `-x` or `-m bin`)
+the default repo and dest locations are changed, and only executable files in the repo are symlinked.
 
 Another thing to know is this script does not fully manage your git repos for
 you. It only goes as far to "git clone" new repos, "git add" new files, "git
@@ -58,8 +61,11 @@ HowTo
    -n         dry run (no changes are performed)
    -s         skip conflicts
    -f         auto fix conflicts (default is interactive)
-   -r <dir>   repo dir (default = $HOME/dots)
-   -d <dir>   symlink destination dir (default = $HOME)
+   -x         enable binary/executable mode
+   -r <dir>   repo dir (default: dot = $HOME/.nostalgic/dots; bin = $HOME/.nostalgic/bins)
+   -d <dir>   symlink destination dir (default: dot = $HOME; bin = $HOME/bin)
+   -c <file>  use config file (default = $HOME/.nostalgicrc)
+   -m <mode>  file mode: dot or bin
 
  Commands:
    clone <uri>            clone URI as a repo to be used
