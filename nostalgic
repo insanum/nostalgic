@@ -230,7 +230,13 @@ function Track()
     [[ -z "$1" || -z "$2" ]] && err "track requires two arguments"
 
     local repo="$REPOS/$2"
-    local newfile="$repo/${1#.}"
+    
+    if [[ $PREFIXED -eq 1 ]]; then
+	    local newfile="$repo/${1}"
+	else
+	    local newfile="$repo/${1#.}"
+	fi
+
 
     RepoExists "$repo" 'track'
 
@@ -271,6 +277,7 @@ cat <<EOM
    -n         dry run (no changes are performed)
    -s         skip conflicts
    -f         auto fix conflicts (default is interactive)
+   -p         Include files already starting with a dot
    -r <dir>   repo dir (default = \$HOME/dots)
    -d <dir>   symlink destination dir (default = \$HOME)
 
