@@ -58,6 +58,7 @@ HowTo
    -n         dry run (no changes are performed)
    -s         skip conflicts
    -f         auto fix conflicts (default is interactive)
+   -p         Include files already starting with a dot
    -r <dir>   repo dir (default = $HOME/dots)
    -d <dir>   symlink destination dir (default = $HOME)
 
