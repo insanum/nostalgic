@@ -35,6 +35,7 @@ DEST=$HOME
 DRYRUN=0
 SKIP_CONFLICTS=0
 FIX_CONFLICTS=0
+PREFIXED=0
 
 CLR_CLEAR="\e[0m"
 CLR_CYAN="\e[1;36m"
@@ -161,10 +162,15 @@ function SymlinkRepo()
 
     log $CLR_MAGENTA "--> symlinking repo [$repo]"
 
-    # uncomment this if '.' prefixed files are in the repo
-    #shopt -s dotglob
+    if [[ $PREFIXED -eq 1 ]]; then
+		shopt -s dotglob
+		GLOBIGNORE=.git
+	    PREFIX=""
+	else
+	    PREFIX="."
+	fi
 
-    PREFIX="."
+
 
     for file in *; do
         SLINK="$DEST/$PREFIX$file"
@@ -195,8 +201,10 @@ function SymlinkRepo()
         log $CLR_GREEN "--> symlinked [$file]"
     done
 
-    # uncomment this if '.' prefixed files are in the repo
-    #shopt -u dotglob
+    if [[ $PREFIXED -eq 1 ]]; then
+		shopt -u dotglob
+	fi
+
 
     cd "$OLDPWD"
 }
@@ -278,11 +286,12 @@ EOM
 
 [[ -x `which git` ]] || err "git not found"
 
-while getopts "nsfr:d:" opt; do
+while getopts "nsfpr:d:" opt; do
     case $opt in
         n) DRYRUN=1         ;;
         s) SKIP_CONFLICTS=1 ;;
         f) FIX_CONFLICTS=1  ;;
+        p) PREFIXED=1       ;;
         r) REPOS=$OPTARG    ;;
         d) DEST=$OPTARG     ;;
         *) break
