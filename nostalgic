@@ -61,7 +61,7 @@ function log()
 function parse_url()
 {
     SED=sed
-    if [[ $OSTYPE =~ solaris ]]; then
+    if [[ $OSTYPE =~ solaris || $OSTYPE =~ darwin ]]; then
         SED=gsed
     fi
     printf "$1" | $SED -r 's#^.*/([^/.]+)(\.git)?$#\1#'
