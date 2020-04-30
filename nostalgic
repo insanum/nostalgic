@@ -30,8 +30,19 @@
 # Author: Eric Davis <http://insanum.com>
 #
 
-REPOS=$HOME/dots
-DEST=$HOME
+NBASEDIR=$HOME/.nostalgic
+
+OLD_DOT_REPOS=$HOME/dots
+DOT_REPOS=$NBASEDIR/dots
+BIN_REPOS=$NBASEDIR/bins
+REPOS=$DOT_REPOS
+DOT_DEST=$HOME
+BIN_DEST=$HOME/bin
+DEST=$DOT_DEST
+DOT_PREFIX=.
+BIN_PREFIX=
+CFGFILE=$HOME/.nostalgicrc
+MODE=dot
 DRYRUN=0
 SKIP_CONFLICTS=0
 FIX_CONFLICTS=0
@@ -55,6 +66,46 @@ function log()
     local clr=$1
     shift
     echo -e "${clr}${@}${CLR_CLEAR}"
+}
+
+# determines whether the file is a candidate for linking
+function verify_symlink_file()
+{
+  [[ $MODE = 'dot' ]] || [[ -x "$1" ]]
+}
+
+# strips a base path from a file path to determine the relative path
+# (file must be under base path for this to work correctly)
+# 1: base path
+# 2: possible non-absolute file path
+function rel_src_path()
+{
+  # strip the destination prefix from file path
+  local absfilepath=$(readlink -f $2)
+  local absbasepath=$(readlink -f $1)
+  local relpath=${absfilepath##$absbasepath}
+  echo ${relpath#/}
+}
+
+# converts a repository path to a filesystem path
+# this implements the dotfile naming convention
+# 1: the relative file path in the repo
+function from_repo_path()
+{
+  # in dotfile mode we prefix a dot
+  local prefix_var="${MODE^^}_PREFIX"
+  local prefix=${!prefix_var}
+  echo "$prefix$1"
+}
+
+# converts a filesystem path to a repo path
+# this implements the dotfile naming convention
+# 1: the relative file path in the filesystem
+function to_repo_path()
+{
+  local prefix_var="${MODE^^}_PREFIX"
+  local prefix=${!prefix_var}
+  echo "${1#$prefix}"
 }
 
 # Get the repo name from an URL
@@ -164,10 +215,13 @@ function SymlinkRepo()
     # uncomment this if '.' prefixed files are in the repo
     #shopt -s dotglob
 
-    PREFIX="."
-
     for file in *; do
-        SLINK="$DEST/$PREFIX$file"
+        SLINK="$DEST/$(from_repo_path $file)"
+
+        if ! verify_symlink_file "$repo/$file"; then
+            log $CLR_CYAN "--> [$file] skipping non-executable file"
+            continue
+        fi
 
         if [[ -e "$SLINK" && `readlink "$SLINK"` == "$repo/$file" ]]; then
             log $CLR_CYAN "--> [$file] already symlinked"
@@ -222,7 +276,10 @@ function Track()
     [[ -z "$1" || -z "$2" ]] && err "track requires two arguments"
 
     local repo="$REPOS/$2"
-    local newfile="$repo/${1#.}"
+    # strip the destination prefix from file path
+    local relpath=$(rel_src_path ${DEST} $1)
+    local reporelpath=$(to_repo_path $relpath)
+    local newfile="$repo/$reporelpath"
 
     RepoExists "$repo" 'track'
 
@@ -240,14 +297,14 @@ function Track()
     log $CLR_GREEN "--> symlinked [$newfile] to [$1]"
 
     if [[ $DRYRUN -eq 0 ]]; then
-        TGTDIR="`dirname $1`"
-        [[ "$TGTDIR" != "." ]] && mkdir -p "$repo/${TGTDIR#.}"
+        TGTDIR="$(dirname "$reporelpath")"
+        [[ "$TGTDIR" != "." ]] && mkdir -p "$repo/$TGTDIR"
 
         mv -f "$1" "$newfile"
         ln -s "$newfile" "$1"
 
         cd "$repo"
-        git add "${1#.}"
+        git add "$reporelpath"
         cd "$OLDPWD"
     fi
 
@@ -263,8 +320,11 @@ cat <<EOM
    -n         dry run (no changes are performed)
    -s         skip conflicts
    -f         auto fix conflicts (default is interactive)
-   -r <dir>   repo dir (default = \$HOME/dots)
-   -d <dir>   symlink destination dir (default = \$HOME)
+   -x         enable binary/executable mode
+   -r <dir>   repo dir (default: dot = \$HOME/.nostalgic/dots; bin = \$HOME/.nostalgic/bins)
+   -d <dir>   symlink destination dir (default: dot = \$HOME; bin = \$HOME/bin)
+   -c <file>  use config file (default = \$HOME/.nostalgicrc)
+   -m <mode>  file mode: dot or bin
 
  Commands:
    clone <uri>            clone URI as a repo to be used
@@ -278,18 +338,40 @@ EOM
 
 [[ -x `which git` ]] || err "git not found"
 
-while getopts "nsfr:d:" opt; do
+while getopts "nsfxr:d:c:m:" opt; do
     case $opt in
         n) DRYRUN=1         ;;
         s) SKIP_CONFLICTS=1 ;;
         f) FIX_CONFLICTS=1  ;;
+        x) MODE=bin ;;
         r) REPOS=$OPTARG    ;;
         d) DEST=$OPTARG     ;;
+        c) CFGFILE=$OPTARG  ;;
+        m) MODE=$OPTARG  ;;
         *) break
     esac
 done
 
 shift $((OPTIND-1))
+
+case $MODE in
+  d|dot)
+    MODE=dot
+    REPOS=$DOT_REPOS 
+    DEST=$DOT_DEST
+    # backwards compatibility - set dot dest to the "old" dot dest
+    # if it already exists
+    [[ -d $OLD_DOT_REPOS ]] && REPOS=$OLD_DOT_REPOS
+    ;; 
+  b|bin)
+    MODE=bin
+    REPOS=$BIN_REPOS
+    DEST=$BIN_DEST
+    ;;
+  *) err "Invalid mode. Specify: 'dot' or 'bin'";;
+esac
+
+[[ -f "$CFGFILE" ]] && . "$CFGFILE"
 
 if [[ "${REPOS:0:1}" != "/" ]]; then
     err "repos dir '$REPOS' is not a full pathname"
