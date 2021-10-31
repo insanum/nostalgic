@@ -22,26 +22,32 @@ Requirements
 Features
 --------
 
- * files and directories are symlinked directly from inside git repos to $HOME
+ * files are symlinked directly under $HOME to files under git repos
+ * directory trees are also recreated under $HOME and files are symlinked
  * any number of remote git repos can be cloned and symlinked
  * conflicts can be skipped, auto fixed, or interactively fixed
  * add new files to a specified git repo
  * git pull remote changes for git repos
  * Simple!
 
-NOTE
-----
+NOTES
+-----
 
-One thing to know about this script is every file and directory symlinked from
-a git repo is prefixed WITH a dot(.) and each of these files is stored in the
-git repo WITHOUT a dot(.). Please submit a pull request if you like the script
-but not this behaviour. And make sure it's configurable via a command line
-option.
+Every file and directory symlinked from a git repo is prefixed WITH a dot(.)
+and each of these files is stored in the git repo WITHOUT a dot(.). If you'd
+prefer to store files in the git repo with a dot(.) then use the `-p` option
+which tells nostalgic to not prefix a dot(.) when symlinking. Note that with
+`-p` nostalgic only looks at dot files in the repo and without `-p` nostalgic
+only looks at non-dot files in the repo. Mixing is not supported.
 
-Another thing to know is this script does not fully manage your git repos for
-you. It only goes as far to "git clone" new repos, "git add" new files, "git
-pull" remote updates, and "git status" for repo status. Any other stuff you
-need to do for managing your repos (i.e. submit!) you'll have to do manually.
+For directory trees in the git repo, nostalgic will re-create the same tree
+structure and then create symlinks the files underneath. This allows for
+managing files under an existing/shared directory (i.e. `~/.config/...`).
+
+This script does not fully manage your git repos for you. It only goes as far
+to "git clone" new repos, "git add" new files, "git pull" remote updates, and
+"git status" for repo status. Any other stuff you need to do for managing your
+repos (i.e. submit!) you'll have to do manually.
 
 It's best to get in the habit of pulling frequently and submitting any changes
 immediately after they're made. Adhering to this procedure will prevent
@@ -58,6 +64,7 @@ HowTo
    -n         dry run (no changes are performed)
    -s         skip conflicts
    -f         auto fix conflicts (default is interactive)
+   -p         include files already starting with a dot
    -r <dir>   repo dir (default = $HOME/dots)
    -d <dir>   symlink destination dir (default = $HOME)
 
@@ -76,7 +83,7 @@ Cloned git repos live under $HOME/dots (overridden with -r).
 
 Symlinked files go under $HOME (overridden with -d).
 
-```
+```bash
 ~ % mkdir dots
 
 ~ % mkdir test

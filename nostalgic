@@ -35,6 +35,7 @@ DEST=$HOME
 DRYRUN=0
 SKIP_CONFLICTS=0
 FIX_CONFLICTS=0
+PREFIXED=0
 
 CLR_CLEAR="\e[0m"
 CLR_CYAN="\e[1;36m"
@@ -83,7 +84,7 @@ function Clone()
 function List()
 {
     for repo in `ls "$REPOS"`; do
-        repo="$REPOS/$repo"
+        local repo="$REPOS/$repo"
         [[ ! -d "$repo" ]] && continue
         cd "$repo"
         log $CLR_GREEN "--> repo [$repo] cloned from [`git config remote.origin.url`]"
@@ -116,7 +117,7 @@ function Pull()
 
     if [[ "$1" == ALL ]]; then
         for r in `ls "$REPOS"`; do
-            repo="$REPOS/$r"
+            local repo="$REPOS/$r"
             [[ ! -d "$repo" ]] && continue
             PullRepo "$repo"
         done
@@ -142,7 +143,7 @@ function Status()
 
     if [[ "$1" == ALL ]]; then
         for r in `ls "$REPOS"`; do
-            repo="$REPOS/$r"
+            local repo="$REPOS/$r"
             [[ ! -d "$repo" ]] && continue
             StatusRepo "$repo"
         done
@@ -161,42 +162,54 @@ function SymlinkRepo()
 
     log $CLR_MAGENTA "--> symlinking repo [$repo]"
 
-    # uncomment this if '.' prefixed files are in the repo
-    #shopt -s dotglob
+    local prefix="."
+    local find='find * -type f -print'
 
-    PREFIX="."
+    if [[ $PREFIXED -eq 1 ]]; then
+        prefix=""
+        find='find .* -type d -name .git -prune -o
+                      -type d -name .    -prune -o
+                      -type d -name ..   -prune -o
+                      -type f -print'
+    fi
 
-    for file in *; do
-        SLINK="$DEST/$PREFIX$file"
+    for file in `$find`; do
+        local slink="$DEST/$prefix$file"
 
-        if [[ -e "$SLINK" && `readlink "$SLINK"` == "$repo/$file" ]]; then
+        if [[ -e "$slink" && `readlink "$slink"` == "$repo/$file" ]]; then
             log $CLR_CYAN "--> [$file] already symlinked"
             continue
         fi
 
-        if [[ -e "$SLINK" ]]; then
+        if [[ -e "$slink" ]]; then
             if [[ $SKIP_CONFLICTS -eq 1 ]]; then
                 log $CLR_YELLOW "(!) conflict symlink exists for [$file]"
                 continue
             fi
 
             if [[ $FIX_CONFLICTS -eq 0 ]]; then
-                log $CLR_YELLOW "conflict for [$file] -> [`readlink "$SLINK"`]"
+                log $CLR_YELLOW "conflict for [$file] -> [`readlink "$slink"`]"
                 read -p "fix $file? [y/(n)]" fix
                 [[ $fix =~ [Nn] ]] && continue
             else
                 log $CLR_YELLOW "(!) fixing conflict for [$file]"
             fi
 
-            [[ $DRYRUN -eq 0 ]] && rm -f "$SLINK"
+            [[ $DRYRUN -eq 0 ]] && rm -f "$slink"
         fi
 
-        [[ $DRYRUN -eq 0 ]] && ln -s "$repo/$file" "$SLINK"
-        log $CLR_GREEN "--> symlinked [$file]"
-    done
+        local d=`dirname $file`
+        if [[ -n "$d" && "$d" != "." ]]; then
+            d=$DEST/$prefix$d
+            if [[ ! -d "$DEST/$d" ]]; then
+                [[ $DRYRUN -eq 0 ]] && mkdir -p $d
+                log $CLR_GREEN "--> mkdir [$d]"
+            fi
+        fi
 
-    # uncomment this if '.' prefixed files are in the repo
-    #shopt -u dotglob
+        [[ $DRYRUN -eq 0 ]] && ln -s "$repo/$file" "$slink"
+        log $CLR_GREEN "--> symlinked [$slink] -> [$repo/$file]"
+    done
 
     cd "$OLDPWD"
 }
@@ -207,7 +220,7 @@ function Symlink()
 
     if [[ "$1" == ALL ]]; then
         for r in `ls "$REPOS"`; do
-            repo="$REPOS/$r"
+            local repo="$REPOS/$r"
             [[ ! -d "$repo" ]] && continue
             SymlinkRepo "$repo"
         done
@@ -222,7 +235,12 @@ function Track()
     [[ -z "$1" || -z "$2" ]] && err "track requires two arguments"
 
     local repo="$REPOS/$2"
-    local newfile="$repo/${1#.}"
+
+    if [[ $PREFIXED -eq 1 ]]; then
+        local newfile="$repo/${1}"
+    else
+        local newfile="$repo/${1#.}"
+    fi
 
     RepoExists "$repo" 'track'
 
@@ -240,8 +258,8 @@ function Track()
     log $CLR_GREEN "--> symlinked [$newfile] to [$1]"
 
     if [[ $DRYRUN -eq 0 ]]; then
-        TGTDIR="`dirname $1`"
-        [[ "$TGTDIR" != "." ]] && mkdir -p "$repo/${TGTDIR#.}"
+        local tgtdir="`dirname $1`"
+        [[ "$tgtdir" != "." ]] && mkdir -p "$repo/${tgtdir#.}"
 
         mv -f "$1" "$newfile"
         ln -s "$newfile" "$1"
@@ -263,6 +281,7 @@ cat <<EOM
    -n         dry run (no changes are performed)
    -s         skip conflicts
    -f         auto fix conflicts (default is interactive)
+   -p         include files already starting with a dot
    -r <dir>   repo dir (default = \$HOME/dots)
    -d <dir>   symlink destination dir (default = \$HOME)
 
@@ -278,11 +297,12 @@ EOM
 
 [[ -x `which git` ]] || err "git not found"
 
-while getopts "nsfr:d:" opt; do
+while getopts "nsfpr:d:" opt; do
     case $opt in
         n) DRYRUN=1         ;;
         s) SKIP_CONFLICTS=1 ;;
         f) FIX_CONFLICTS=1  ;;
+        p) PREFIXED=1       ;;
         r) REPOS=$OPTARG    ;;
         d) DEST=$OPTARG     ;;
         *) break
