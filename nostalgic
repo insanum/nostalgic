@@ -36,6 +36,13 @@ DRYRUN=0
 SKIP_CONFLICTS=0
 FIX_CONFLICTS=0
 PREFIXED=0
+VERBOSE=0
+
+# Symlink counters (for summary mode)
+SYMLINK_CREATED=0
+SYMLINK_EXISTS=0
+SYMLINK_CONFLICTS=0
+SYMLINK_FIXED=0
 
 function log_red()     { echo -e "\e[1;31m$*\e[0m"; }
 function log_green()   { echo -e "\e[1;32m$*\e[0m"; }
@@ -163,41 +170,139 @@ function status()
     for_each_repo status_repo "$1" "status"
 }
 
+# Git diff for a single repository
+# $1: repo path
+function diff_repo()
+{
+    repo_exists "$1" 'diff'
+    log_green "--> git diff for repo [$1]"
+    (cd "$1" && git diff)
+}
+
+# Git diff for a repo or all repos
+# $1: repo name or 'ALL'
+function diff_cmd()
+{
+    for_each_repo diff_repo "$1" "diff"
+}
+
+# Verify a file is a symlink managed by nostalgic
+# Sets MANAGED_TARGET and MANAGED_REPO on success
+# $1: file path
+# $2: if "quiet", return 1 instead of erroring
+function verify_managed_symlink()
+{
+    local file=$1
+    local quiet=$2
+
+    MANAGED_TARGET=""
+    MANAGED_REPO=""
+
+    if [[ ! -L "$file" ]]; then
+        [[ "$quiet" == "quiet" ]] && return 1
+        err "[$file] is not a symlink"
+    fi
+
+    local target
+    target=$(readlink "$file")
+
+    if [[ ! -e "$target" ]]; then
+        [[ "$quiet" == "quiet" ]] && return 1
+        err "[$file] points to non-existent target [$target]"
+    fi
+
+    if [[ "$target" != "$REPOS/"* ]]; then
+        [[ "$quiet" == "quiet" ]] && return 1
+        err "[$file] is not managed by nostalgic (not in $REPOS)"
+    fi
+
+    MANAGED_TARGET=$target
+
+    # Extract repo name: $REPOS/reponame/... -> reponame
+    local repo_path=${target#$REPOS/}
+    MANAGED_REPO=${repo_path%%/*}
+
+    return 0
+}
+
+# Edit a tracked file in its repo location
+# $1: symlink path (e.g., ~/.bashrc)
+function edit()
+{
+    [[ -z "$1" ]] && err "edit requires a file argument"
+
+    verify_managed_symlink "$1"
+
+    local editor=${EDITOR:-vi}
+    log_green "--> editing [$MANAGED_TARGET]"
+    "$editor" "$MANAGED_TARGET"
+}
+
+# Show which repo manages a symlink
+# $1: symlink path
+function which_repo()
+{
+    [[ -z "$1" ]] && err "which requires a file argument"
+
+    if ! verify_managed_symlink "$1" "quiet"; then
+        if [[ ! -L "$1" ]]; then
+            log_yellow "[$1] is not a symlink"
+        else
+            log_yellow "[$1] is not managed by nostalgic"
+        fi
+        return 1
+    fi
+
+    log_green "--> [$1] is managed by repo [$MANAGED_REPO]"
+    log_cyan "    target: $MANAGED_TARGET"
+}
+
 # Create a symlink for a single file, handling conflicts
 # $1: repo path
 # $2: relative file path in repo
 # $3: symlink path in destination
 function process_symlink()
 {
-    local repo=$1 file=$2 slink=$3
+    local repo=$1
+    local file=$2
+    local slink=$3
 
     if [[ -e "$slink" ]]; then
         local current_target=$(readlink "$slink" 2>/dev/null)
 
         if [[ "$current_target" == "$repo/$file" ]]; then
-            log_cyan "--> [$file] already symlinked"
+            ((SYMLINK_EXISTS++))
+            [[ $VERBOSE -eq 1 ]] && log_cyan "--> [$file] already symlinked"
             return
         fi
 
         if [[ $SKIP_CONFLICTS -eq 1 ]]; then
-            log_yellow "(!) conflict symlink exists for [$file]"
+            ((SYMLINK_CONFLICTS++))
+            [[ $VERBOSE -eq 1 ]] && \
+                log_yellow "(!) conflict symlink exists for [$file]"
             return
         fi
 
         if [[ $FIX_CONFLICTS -eq 0 ]]; then
             log_yellow "conflict for [$file] -> [$current_target]"
             read -p "fix $file? [y/(n)] " fix </dev/tty
-            [[ $fix =~ [Nn] ]] && return
+            if [[ $fix =~ [Nn] ]]; then
+                ((SYMLINK_CONFLICTS++))
+                return
+            fi
         else
-            log_yellow "(!) fixing conflict for [$file]"
+            [[ $VERBOSE -eq 1 ]] && \
+                log_yellow "(!) fixing conflict for [$file]"
         fi
 
+        ((SYMLINK_FIXED++))
         run rm -f "$slink"
     fi
 
     ensure_dir "$(dirname "$slink")"
     run ln -s "$repo/$file" "$slink" || log_red "failed to symlink [$slink]"
-    log_green "--> symlinked [$slink] -> [$repo/$file]"
+    ((SYMLINK_CREATED++))
+    [[ $VERBOSE -eq 1 ]] && log_green "--> symlinked [$slink] -> [$repo/$file]"
 }
 
 # Create symlinks for all files in a single repository
@@ -209,24 +314,41 @@ function symlink_repo()
 
     log_magenta "--> symlinking repo [$repo]"
 
+    # Reset counters for this repo
+    SYMLINK_CREATED=0
+    SYMLINK_EXISTS=0
+    SYMLINK_CONFLICTS=0
+    SYMLINK_FIXED=0
+
     if [[ $PREFIXED -eq 1 ]]; then
-        find "$repo" -mindepth 1 -name '.git' -prune -o \
-                                 -name '.'    -prune -o \
-                                 -name '..'   -prune -o \
-                                 -name '.*' -type f -print | while read -r fullpath; do
+        while IFS= read -r fullpath; do
             local file="${fullpath#$repo/}"
             local slink="$DEST/$file"
             process_symlink "$repo" "$file" "$slink"
-        done
+        done < <(find "$repo" -mindepth 1 -name '.git' -prune -o \
+                                          -name '.'    -prune -o \
+                                          -name '..'   -prune -o \
+                                          -name '.*' -type f -print)
     else
-        find "$repo" -mindepth 1 -name '.git' -prune -o \
-                                 -name '.*'   -prune -o \
-                                 -type f -print | while read -r fullpath; do
+        while IFS= read -r fullpath; do
             local file="${fullpath#$repo/}"
             local slink="$DEST/.$file"
             process_symlink "$repo" "$file" "$slink"
-        done
+        done < <(find "$repo" -mindepth 1 -name '.git' -prune -o \
+                                          -name '.*'   -prune -o \
+                                          -type f -print)
     fi
+
+    # Print summary
+    local total=$((SYMLINK_CREATED + SYMLINK_EXISTS + SYMLINK_CONFLICTS))
+    local summary="    $total files: $SYMLINK_CREATED symlinked"
+    [[ $SYMLINK_EXISTS -gt 0 ]] && \
+        summary+=", $SYMLINK_EXISTS already linked"
+    [[ $SYMLINK_FIXED -gt 0 ]] && \
+        summary+=", $SYMLINK_FIXED conflicts fixed"
+    [[ $SYMLINK_CONFLICTS -gt 0 ]] && \
+        summary+=", $SYMLINK_CONFLICTS conflicts skipped"
+    log_green "$summary"
 }
 
 # Create symlinks for a repo or all repos
@@ -236,40 +358,56 @@ function symlink()
     for_each_repo symlink_repo "$1" "symlink"
 }
 
-# Check if a symlink is dangling and points to a repo, remove if so
+# Check if a symlink is dangling and points to a managed repo, remove if so
 # $1: symlink path
-# $2: repo path
+# $2: repo path (optional - if omitted, any managed repo matches)
 function check_and_remove_dangling()
 {
-    local slink=$1 repo=$2
-    local link_target=$(readlink "$slink" 2>/dev/null)
+    local slink=$1
+    local repo=$2
+    local link_target
+    link_target=$(readlink "$slink" 2>/dev/null)
 
-    if [[ "$link_target" == "$repo/"* && ! -e "$link_target" ]]; then
-        log_yellow "--> removing dangling symlink [$slink] -> [$link_target]"
-        run rm -f "$slink"
-        return 0
+    # Must be dangling (target doesn't exist)
+    [[ -e "$link_target" ]] && return 1
+
+    # Must point to a managed repo
+    [[ "$link_target" != "$REPOS/"* ]] && return 1
+
+    # If repo specified, must match that repo
+    if [[ -n "$repo" && "$link_target" != "$repo/"* ]]; then
+        return 1
     fi
-    return 1
+
+    log_yellow "--> removing dangling symlink [$slink] -> [$link_target]"
+    run rm -f "$slink"
+    return 0
 }
 
 # Remove dangling symlinks that point to a repository
 # $1: file or directory path to check
-# $2: repo name
-function unlink()
+# $2: repo name (optional - if omitted, cleans symlinks to any managed repo)
+function unlink_cmd()
 {
-    [[ -z "$1" || -z "$2" ]] && err "unlink requires two arguments"
+    [[ -z "$1" ]] && err "unlink requires a path argument"
 
-    local target=$1 repo="$REPOS/$2"
+    local target=$1
+    local repo=""
 
-    repo_exists "$repo" 'unlink'
+    if [[ -n "$2" ]]; then
+        repo="$REPOS/$2"
+        repo_exists "$repo" 'unlink'
+    fi
 
     [[ ! -e "$target" && ! -L "$target" ]] && err "path $target does not exist"
 
     if [[ -L "$target" && ! -d "$target" ]]; then
         check_and_remove_dangling "$target" "$repo" || \
-            log_cyan "--> [$target] is not a dangling symlink to repo [$repo]"
+            log_cyan "--> [$target] is not a dangling symlink"
     elif [[ -d "$target" ]]; then
-        log_magenta "--> checking directory [$target] for dangling symlinks to repo [$repo]"
+        local scope="managed repos"
+        [[ -n "$repo" ]] && scope="repo [$(basename "$repo")]"
+        log_magenta "--> checking directory [$target] for dangling symlinks to $scope"
         find "$target" -type l | while read -r slink; do
             check_and_remove_dangling "$slink" "$repo"
         done
@@ -278,35 +416,131 @@ function unlink()
     fi
 }
 
+# Count available repos
+function count_repos()
+{
+    local count=0
+    for r in "$REPOS"/*; do
+        [[ -d "$r/.git" ]] && ((count++))
+    done
+    echo $count
+}
+
+# Get the single repo name if only one exists
+function get_single_repo()
+{
+    for r in "$REPOS"/*; do
+        [[ -d "$r/.git" ]] && echo "$(basename "$r")" && return
+    done
+}
+
+# Try to detect repo from sibling symlinks in the same directory
+# $1: file path
+function detect_repo_from_siblings()
+{
+    local dir=$(dirname "$1")
+    for sibling in "$dir"/*; do
+        [[ ! -L "$sibling" ]] && continue
+        local target=$(readlink "$sibling")
+        if [[ "$target" == "$REPOS/"* ]]; then
+            local repo_path=${target#$REPOS/}
+            echo "${repo_path%%/*}"
+            return 0
+        fi
+    done
+    return 1
+}
+
 # Add a file to a repo, git add it, and create a symlink
 # $1: file path to track
-# $2: repo name
+# $2: repo name (optional auto-detect if single repo or sibling symlinks)
 function track()
 {
-    [[ -z "$1" || -z "$2" ]] && err "track requires two arguments"
+    [[ -z "$1" ]] && err "track requires a file argument"
 
-    local repo="$REPOS/$2"
+    local file=$1
+    local repo_name=$2
+
+    [[ ! -e "$file" ]] && err "file $file does not exist"
+
+    # Auto-detect repo if not specified
+    if [[ -z "$repo_name" ]]; then
+        # First try: check sibling files for existing symlinks
+        repo_name=$(detect_repo_from_siblings "$file")
+
+        # Second try: if only one repo exists, use it
+        if [[ -z "$repo_name" ]]; then
+            local repo_count=$(count_repos)
+            if [[ $repo_count -eq 0 ]]; then
+                err "no repos found in $REPOS"
+            elif [[ $repo_count -eq 1 ]]; then
+                repo_name=$(get_single_repo)
+                log_cyan "--> auto-detected repo [$repo_name] (only repo)"
+            else
+                err "multiple repos exist, specify which one to use"
+            fi
+        else
+            log_cyan "--> auto-detected repo [$repo_name] (from sibling symlinks)"
+        fi
+    fi
+
+    local repo="$REPOS/$repo_name"
     local newfile
-    [[ $PREFIXED -eq 1 ]] && newfile="$repo/$1" || newfile="$repo/${1#.}"
+    [[ $PREFIXED -eq 1 ]] && newfile="$repo/$file" || newfile="$repo/${file#.}"
 
     repo_exists "$repo" 'track'
 
-    [[ ! -e "$1" ]] && err "file $1 does not exist"
-
     if [[ -e "$newfile" ]]; then
-        [[ $FIX_CONFLICTS -eq 0 ]] && err "file [$1] already exists in repo [$2]"
-        log_red "overwriting [$1] which already exists in repo [$2]"
+        [[ $FIX_CONFLICTS -eq 0 ]] && \
+            err "file [$file] already exists in repo [$repo_name]"
+        log_red "overwriting [$file] which already exists in repo [$repo_name]"
     fi
 
     log_green "--> adding [$newfile] to repo [$repo]"
-    log_green "--> symlinked [$1] -> [$newfile]"
+    log_green "--> symlinked [$file] -> [$newfile]"
 
     ensure_dir "$(dirname "$newfile")"
-    run mv -f "$1" "$newfile" || err "failed to move file [$1]"
-    run ln -s "$newfile" "$1" || err "failed to create symlink [$1]"
-    run sh -c "cd '$repo' && git add '${newfile#$repo/}'" || err "failed to git add [$newfile]"
+    run mv -f "$file" "$newfile" || err "failed to move file [$file]"
+    run ln -s "$newfile" "$file" || err "failed to create symlink [$file]"
+    run sh -c "cd '$repo' && git add '${newfile#$repo/}'" || \
+        err "failed to git add [$newfile]"
 
-    status "$2"
+    status "$repo_name"
+}
+
+# Remove a file from tracking: remove symlink, move file back, git rm
+# $1: symlink path (e.g., ~/.bashrc)
+# $2: repo name (optional - verified if provided)
+function untrack()
+{
+    [[ -z "$1" ]] && err "untrack requires a file argument"
+
+    local slink=$1
+    local repo_name=$2
+
+    verify_managed_symlink "$slink"
+
+    # If repo specified, verify it matches
+    if [[ -n "$repo_name" && "$repo_name" != "$MANAGED_REPO" ]]; then
+        err "[$slink] is managed by [$MANAGED_REPO], not [$repo_name]"
+    fi
+
+    local repo="$REPOS/$MANAGED_REPO"
+    local repo_file=${MANAGED_TARGET#$repo/}
+
+    log_green "--> untracking [$slink] from repo [$MANAGED_REPO]"
+
+    # Remove symlink and move file back
+    run rm -f "$slink" || err "failed to remove symlink [$slink]"
+    run mv "$MANAGED_TARGET" "$slink" || \
+        err "failed to move [$MANAGED_TARGET] to [$slink]"
+
+    # Git rm the file
+    run sh -c "cd '$repo' && git rm --cached '$repo_file'" || \
+        log_yellow "warning: git rm failed for [$repo_file]"
+
+    log_green "--> [$slink] is now a regular file (removed from repo [$MANAGED_REPO])"
+    status "$MANAGED_REPO"
 }
 
 function usage()
@@ -319,6 +553,7 @@ function usage()
    -s         skip conflicts
    -f         auto fix conflicts (default is interactive)
    -p         include files already starting with a dot
+   -v         verbose output (show each symlink operation)
    -r <dir>   repo dir (default = \$HOME/dots)
    -d <dir>   symlink destination dir (default = \$HOME)
 
@@ -327,21 +562,26 @@ function usage()
    list                   list cloned repos being used
    pull <repo>            git pull for the repo ('ALL' for all repos)
    status <repo>          git status for the repo ('ALL' for all repos)
+   diff <repo>            git diff for the repo ('ALL' for all repos)
    symlink <repo>         create symlinks for the repo ('ALL' for all repos)
-   track <file> <repo>    copy the file to the repo, git add it, and symlink it
-   unlink <path> <repo>   remove dangling symlinks (path can be file or dir)
+   track <file> [repo]    move file to repo and symlink it (auto-detect repo)
+   untrack <file> [repo]  remove symlink and move file back (auto-detect repo)
+   unlink <path> [repo]   remove dangling symlinks (path can be file or dir)
+   edit <file>            edit a tracked file in \$EDITOR
+   which <file>           show which repo manages a symlinked file
 EOM
     exit 1
 }
 
 command -v git >/dev/null 2>&1 || err "git not found"
 
-while getopts "nsfpr:d:" opt; do
+while getopts "nsfpvr:d:" opt; do
     case $opt in
         n) DRYRUN=1         ;;
         s) SKIP_CONFLICTS=1 ;;
         f) FIX_CONFLICTS=1  ;;
         p) PREFIXED=1       ;;
+        v) VERBOSE=1        ;;
         r) REPOS=$OPTARG    ;;
         d) DEST=$OPTARG     ;;
         *) usage            ;;
@@ -368,13 +608,17 @@ if [[ ! -d "$DEST" ]]; then
 fi
 
 case $1 in
-    clone)   shift; clone "$@"   ;;
-    list)    list                ;;
-    pull)    shift; pull "$@"    ;;
-    status)  shift; status "$@"  ;;
-    symlink) shift; symlink "$@" ;;
-    track)   shift; track "$@"   ;;
-    unlink)  shift; unlink "$@"  ;;
-    *)       usage               ;;
+    clone)   shift; clone "$@"      ;;
+    list)    list                   ;;
+    pull)    shift; pull "$@"       ;;
+    status)  shift; status "$@"     ;;
+    diff)    shift; diff_cmd "$@"   ;;
+    symlink) shift; symlink "$@"    ;;
+    track)   shift; track "$@"      ;;
+    untrack) shift; untrack "$@"    ;;
+    unlink)  shift; unlink_cmd "$@" ;;
+    edit)    shift; edit "$@"       ;;
+    which)   shift; which_repo "$@" ;;
+    *)       usage                  ;;
 esac
 
